@@ -1,11 +1,34 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  signOut,
+  updateEmail as fbUpdateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword as fbUpdatePassword,
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  getDocs,
+  collection,
+} from "firebase/firestore";
 import Link from "next/link";
 import jsPDF from "jspdf";
+
+const dailyTips = [
+  "Pamiętaj o odblaskach – zwiększ swoją widoczność.",
+  "Sprawdzaj ciśnienie w oponach przed trasą.",
+  "Utrzymuj bezpieczny odstęp od innych pojazdów.",
+  "Unikaj rozproszeń – odłóż telefon.",
+  "Zawsze używaj kierunkowskazów przy zmianie pasa.",
+  "Sprawdzaj martwe pola przed manewrem.",
+  "Nie zostawiaj kluczyków w widocznym miejscu.",
+  "Regularnie serwisuj hamulce i amortyzatory.",
+];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -13,99 +36,106 @@ export default function Dashboard() {
   const [assignedCourses, setAssignedCourses] = useState([]);
   const [assignedDetails, setAssignedDetails] = useState([]);
   const [completedCourses, setCompletedCourses] = useState([]);
-  const [completedDetails, setCompletedDetails] = useState([]); // szczegóły ukończonych kursów
+  const [completedDetails, setCompletedDetails] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [lastActivity, setLastActivity] = useState([]);
+  const [tipIndex, setTipIndex] = useState(0);
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [stats, setStats] = useState({ inProgress: 0, completed: 0, notifications: 0, total: 0 });
 
+  // Settings state
+  const [emailInput, setEmailInput] = useState("");
+  const [emailMsg, setEmailMsg] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passMsg, setPassMsg] = useState("");
+
+  // Rotate daily tip every 20 seconds
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) {
-        router.push("/auth");
-      } else {
-        setUser(user);
-        fetchUserData(user.uid);
-      }
-    });
+    const interval = setInterval(() => {
+      setTipIndex((i) => (i + 1) % dailyTips.length);
+    }, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
-    return () => unsubscribe();
+  // Listen auth state and fetch data
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        router.push("/auth");
+        return;
+      }
+      setUser(u);
+      setEmailInput(u.email || "");
+      const uSnap = await getDoc(doc(db, "users", u.uid));
+      if (!uSnap.exists()) return;
+      const data = uSnap.data();
+      setAssignedCourses(data.assignedCourses || []);
+      setCompletedCourses(data.completedCourses || []);
+      setNotifications(data.notifications || []);
+      computeStats(data);
+    });
+    return () => unsub();
   }, [router]);
 
-  const fetchUserData = async (userId) => {
-    try {
-      const userDoc = await getDoc(doc(db, "users", userId));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        setAssignedCourses(userData.assignedCourses || []);
-        setCompletedCourses(userData.completedCourses || []);
-        setNotifications(userData.notifications || []);
-      } else {
-        console.error("Brak danych użytkownika!");
-      }
-    } catch (error) {
-      console.error("Błąd pobierania danych użytkownika:", error);
-    }
+  // Fetch assigned course details
+  useEffect(() => {
+    if (!assignedCourses.length) return;
+    (async () => {
+      const arr = await Promise.all(
+        assignedCourses.map(async (id) => {
+          const snap = await getDoc(doc(db, "courses", id));
+          return { id, title: snap.data()?.title || "-" };
+        })
+      );
+      setAssignedDetails(arr);
+    })();
+  }, [assignedCourses]);
+
+  // Fetch completed course details
+  useEffect(() => {
+    if (!completedCourses.length) return;
+    (async () => {
+      const arr = await Promise.all(
+        completedCourses.map(async (c) => {
+          const id = c.courseId;
+          const snap = await getDoc(doc(db, "courses", id));
+          return { id, title: snap.data()?.title || "-", completedAt: c.completedAt };
+        })
+      );
+      setCompletedDetails(arr);
+    })();
+  }, [completedCourses]);
+
+  // Build last activity when notifications or completedDetails change
+  useEffect(() => {
+    const acts = [];
+    notifications.forEach((n) => {
+      acts.push({ message: n.message, timestamp: n.timestamp?.seconds * 1000 || Date.now() });
+    });
+    completedDetails.forEach((c) => {
+      acts.push({
+        message: `Ukończyłeś kurs: ${c.title}`,
+        timestamp: c.completedAt?.seconds * 1000 || Date.now(),
+      });
+    });
+    acts.sort((a, b) => b.timestamp - a.timestamp);
+    setLastActivity(acts.slice(0, 5));
+  }, [notifications, completedDetails]);
+
+  // Compute stats helper
+  const computeStats = (data) => {
+    const inProg = data.assignedCourses?.length || 0;
+    const comp = data.completedCourses?.length || 0;
+    const notif = data.notifications?.length || 0;
+    setStats({ inProgress: inProg, completed: comp, notifications: notif, total: inProg + comp });
   };
 
-  // Pobieramy szczegóły kursów przypisanych (tytuł, itd.)
-  useEffect(() => {
-    const fetchAssignedCoursesDetails = async () => {
-      if (!user) return;
-      try {
-        const details = await Promise.all(
-          assignedCourses.map(async (courseId) => {
-            const courseDoc = await getDoc(doc(db, "courses", courseId));
-            return {
-              courseId,
-              title: courseDoc.exists() ? courseDoc.data().title : "Nieznany kurs",
-            };
-          })
-        );
-        setAssignedDetails(details);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchAssignedCoursesDetails();
-  }, [assignedCourses, user]);
-
-  // Pobieramy szczegóły ukończonych kursów – completedCourses to tablica obiektów { courseId, completedAt }
-  useEffect(() => {
-    const fetchCompletedCoursesDetails = async () => {
-      if (!user) return;
-      try {
-        const details = await Promise.all(
-          completedCourses.map(async (comp) => {
-            const courseId =
-              typeof comp === "object" && comp.courseId ? comp.courseId : comp;
-            const courseDoc = await getDoc(doc(db, "courses", courseId));
-            return {
-              courseId,
-              title: courseDoc.exists() ? courseDoc.data().title : "Nieznany kurs",
-              completedAt:
-                typeof comp === "object" && comp.completedAt ? comp.completedAt : null,
-            };
-          })
-        );
-        setCompletedDetails(details);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchCompletedCoursesDetails();
-  }, [completedCourses, user]);
-
-  const handleDeleteNotification = async (index) => {
+  const handleDeleteNotification = async (i) => {
     if (!user) return;
-    const updatedNotifications = notifications.filter((_, i) => i !== index);
-    try {
-      await updateDoc(doc(db, "users", user.uid), {
-        notifications: updatedNotifications,
-      });
-      setNotifications(updatedNotifications);
-    } catch (error) {
-      console.error("Błąd usuwania powiadomienia:", error);
-    }
+    const updated = notifications.filter((_, idx) => idx !== i);
+    await updateDoc(doc(db, "users", user.uid), { notifications: updated });
+    setNotifications(updated);
   };
 
   const handleLogout = async () => {
@@ -113,152 +143,267 @@ export default function Dashboard() {
     router.push("/auth");
   };
 
-  // Funkcja generująca certyfikat – używana w sekcji ukończonych kursów
-// Funkcja generująca certyfikat – używana w sekcji ukończonych kursów
-const handleGenerateCertificate = (courseId, courseTitle, completedAt) => {
-  if (!user) return;
-  const docPDF = new jsPDF();
-  docPDF.setFont("helvetica", "bold");
-  docPDF.setFontSize(24);
-  // Nagłówek certyfikatu z tytułem kursu
-  docPDF.text(`CERTYFIKAT UKONCZENIA KURSU
-  ${courseTitle}`, 20, 30);
-  
-  docPDF.setFont("helvetica", "normal");
-  docPDF.setFontSize(16);
-  // Wstawiamy e-mail użytkownika
-  docPDF.text(`Gratulacje, ${user.email}!`, 20, 50);
-  // Formatowanie daty ukończenia (zakładamy, że completedAt to obiekt timestamp)
-  const completionDate = completedAt
-    ? new Date(completedAt.seconds * 1000).toLocaleDateString("pl-PL")
-    : "nieznana data";
-  docPDF.text(`W dniu ${completionDate} ukonczyles kurs doszkalajacy.`, 20, 70);
-  docPDF.text(
-    `Zyczymy Ci wielu bezpiecznych kilometrow na drodze oraz
-satysfakcji z nauki!`,
-    20,
-    90
-  );
-  
-  // Podziękowania od zespołu BezpiecznyStart – umieszczone na dole certyfikatu
-  docPDF.setFontSize(12);
-  docPDF.text(`Dziekujemy, zespol BezpiecznyStart`, 20, 280);
-  
-  docPDF.save(`Certyfikat_${courseId}.pdf`);
-};
+  const handleGenerateCertificate = (id, title, completedAt) => {
+    const pdf = new jsPDF();
+    pdf.setFontSize(24);
+    pdf.text(`CERTYFIKAT UKOŃCZENIA KURSU: ${title}`, 20, 30);
+    pdf.setFontSize(16);
+    pdf.text(`Gratulacje, ${user.email}!`, 20, 50);
+    const date = completedAt
+      ? new Date(completedAt.seconds * 1000).toLocaleDateString("pl-PL")
+      : "-";
+    pdf.text(`Ukończono: ${date}`, 20, 70);
+    pdf.save(`Certyfikat_${id}.pdf`);
+  };
 
-  
+  const handleUpdateEmail = async () => {
+    setEmailMsg("");
+    try {
+      await fbUpdateEmail(user, emailInput);
+      await updateDoc(doc(db, "users", user.uid), { email: emailInput });
+      setEmailMsg("E-mail zaktualizowany");
+    } catch (err) {
+      setEmailMsg(err.message);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setPassMsg("");
+    try {
+      const cred = EmailAuthProvider.credential(user.email || "", oldPassword);
+      await reauthenticateWithCredential(user, cred);
+      await fbUpdatePassword(user, newPassword);
+      setPassMsg("Hasło zmienione pomyślnie");
+      setOldPassword("");
+      setNewPassword("");
+    } catch (err) {
+      setPassMsg(err.message);
+    }
+  };
+
+  if (!user) return null;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gray-900 text-white">
-      <div className="bg-gray-800/80 p-8 rounded-lg shadow-lg w-full max-w-2xl text-center">
-        <h1 className="text-3xl font-bold text-white">📌 Panel użytkownika</h1>
-        {user ? (
-          <div className="mt-4">
-            <p className="text-lg">
-              👋 Witaj,{" "}
-              <strong className="text-yellow-400">{user.email}</strong>
-            </p>
-
-            {/* Powiadomienia */}
-            {notifications.length > 0 && (
-              <div className="mt-6 p-4 bg-yellow-200/90 border border-yellow-500 rounded-lg shadow-md">
-                <h2 className="text-lg font-semibold text-black">
-                  🔔 Powiadomienia
-                </h2>
-                <ul className="mt-2">
-                  {notifications.map((notification, index) => (
-                    <li
-                      key={index}
-                      className="flex justify-between items-center bg-white p-2 rounded-md shadow-sm mt-1"
-                    >
-                      <div className="text-black text-left">
-                        <p className="font-semibold">{notification.message}</p>
-                        <p className="text-xs text-gray-600">
-                          {notification.timestamp
-                            ? new Date(
-                                notification.timestamp.seconds * 1000
-                              ).toLocaleString()
-                            : "Brak daty"}
-                        </p>
-                      </div>
-                      <button
-                        className="text-red-500 font-bold hover:text-red-700"
-                        onClick={() => handleDeleteNotification(index)}
-                      >
-                        ❌
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+    <div className="flex h-screen bg-gray-100 text-gray-800">
+      <nav className="w-64 bg-white shadow-lg p-6 flex flex-col">
+        <h1 className="text-2xl font-bold mb-8">Dashboard</h1>
+        <MenuButton icon="🏠" label="Przegląd" active={activeSection === "dashboard"} onClick={() => setActiveSection("dashboard")} />
+        <MenuButton icon="📚" label="Moje kursy" active={activeSection === "courses"} onClick={() => setActiveSection("courses")} />
+        <MenuButton icon="✅" label="Ukończone" active={activeSection === "completed"} onClick={() => setActiveSection("completed")} />
+        <MenuButton icon="🔔" label="Powiadomienia" active={activeSection === "notifications"} onClick={() => setActiveSection("notifications")} />
+        <MenuButton icon="⚙️" label="Ustawienia" active={activeSection === "settings"} onClick={() => setActiveSection("settings")} />
+        <button onClick={handleLogout} className="mt-auto bg-red-500 text-white py-2 rounded hover:bg-red-600">Wyloguj</button>
+      </nav>
+      <main className="flex-1 p-8 overflow-auto">
+        {activeSection === "dashboard" && (
+          <>
+            <h2 className="text-3xl font-bold mb-4">Przegląd</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+              <StatCard label="W trakcie" value={stats.inProgress} />
+              <StatCard label="Ukończone" value={stats.completed} />
+              <StatCard label="Powiadomienia" value={stats.notifications} />
+              <StatCard label="Wszystkie kursy" value={stats.total} />
+            </div>
+            <div className="bg-yellow-200 p-4 rounded-lg mb-6">
+              <h3 className="font-semibold">Porada dnia:</h3>
+              <p>{dailyTips[tipIndex]}</p>
+            </div>
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold mb-2">Ostatnia aktywność</h3>
+              <ul className="list-disc list-inside">
+                {lastActivity.length
+                  ? lastActivity.map((act, i) => (
+                      <li key={i} className="text-sm">
+                        {act.message} –{' '}
+                        <span className="italic">
+                          {new Date(act.timestamp).toLocaleString()}
+                        </span>
+                      </li>
+                    ))
+                  : <li className="text-sm">Brak aktywności</li>
+                }
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Nowinki ze świata drogowego</h3>
+              <div className="bg-white p-4 rounded-lg shadow text-gray-700">
+                <p className="italic">Brak nowinek. Czekaj na aktualizacje!</p>
               </div>
-            )}
+            </div>
+          </>
+        )}
+        {activeSection === "courses" && <CourseCards courses={assignedDetails} />}
+        {activeSection === "completed" && <CompletedSection details={completedDetails} onGenerate={handleGenerateCertificate} />}
+        {activeSection === "notifications" && <Notifications items={notifications} onDelete={handleDeleteNotification} />}
+        {activeSection === "settings" && (
+          <SettingsSection
+            emailInput={emailInput}
+            setEmailInput={setEmailInput}
+            emailMsg={emailMsg}
+            onUpdateEmail={handleUpdateEmail}
+            oldPassword={oldPassword}
+            setOldPassword={setOldPassword}
+            newPassword={newPassword}
+            setNewPassword={setNewPassword}
+            passMsg={passMsg}
+            onChangePassword={handleChangePassword}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
 
-            {/* Twoje kursy – wyświetlamy tytuły */}
-            <h2 className="text-xl font-bold mt-6">📚 Twoje kursy</h2>
-            <ul className="mt-4 w-full">
-              {assignedDetails.length > 0 ? (
-                assignedDetails.map((course, index) => (
-                  <Link key={index} href={`/courses/${course.courseId}`}>
-                    <li className="p-3 bg-blue-500 text-white font-semibold rounded shadow-md text-center hover:bg-blue-600 cursor-pointer transition">
-                      {course.title}
-                    </li>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-gray-400">🚀 Brak przypisanych kursów.</p>
-              )}
-            </ul>
-
-            {/* Ukończone kursy */}
-{/* Ukończone kursy */}
-<h2 className="text-xl font-bold mt-6">✅ Ukończone kursy</h2>
-{completedDetails.length > 0 ? (
-  <ul className="mt-4 w-full">
-    {completedDetails.map((course) => (
-      <li
-        key={course.courseId}
-        className="p-3 bg-green-500 text-white font-semibold rounded shadow-md flex justify-between items-center mt-3"
-      >
-        <div className="text-left">
-          <p>{course.title}</p>
-          <p className="text-sm text-gray-200">
-            Ukończono:{" "}
-            {course.completedAt
-              ? new Date(course.completedAt.seconds * 1000).toLocaleString()
-              : "Nieznana"}
-          </p>
-        </div>
-        <button
-          className="bg-green-700 hover:bg-green-800 text-white px-3 py-1 rounded shadow-md transition"
-          onClick={() =>
-            handleGenerateCertificate(
-              course.courseId,
-              course.title,
-              course.completedAt
-            )
-          }
+// Shared components
+function MenuButton({ icon, label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 mb-4 p-2 rounded hover:bg-gray-200 ${active ? "bg-gray-200 font-semibold" : ""}`}
+    >
+      <span>{icon}</span>
+      {label}
+    </button>
+  );
+}
+function StatCard({ label, value }) {
+  return (
+    <div className="bg-white p-4 rounded-lg shadow text-center">
+      <p className="text-xl font-bold">{value}</p>
+      <p className="text-gray-600">{label}</p>
+    </div>
+  );
+}
+function CourseCards({ courses }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {courses.map((c) => (
+        <div
+          key={c.id}
+          className="bg-blue-500 text-white rounded-lg p-6 shadow hover:shadow-lg transition"
         >
-          Pobierz certyfikat
-        </button>
-      </li>
-    ))}
-  </ul>
-) : (
-  <p className="text-gray-400 mt-4">Brak ukończonych kursów.</p>
-)}
-
-
+          <h3 className="text-xl font-semibold mb-2">{c.title}</h3>
+          <Link
+            href={`/courses/${c.id}`}
+            className="bg-white text-blue-600 px-4 py-2 rounded"
+          >
+            Kontynuuj →
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+function CompletedSection({ details, onGenerate }) {
+  return (
+    <>
+      <h2 className="text-2xl font-semibold mb-4">Ukończone kursy</h2>
+      <div className="space-y-4">
+        {details.map((c) => (
+          <div
+            key={c.id}
+            className="bg-white p-4 rounded-lg shadow flex justify-between items-center"
+          >
+            <p className="font-medium">{c.title}</p>
             <button
-              onClick={handleLogout}
-              className="mt-6 bg-red-500 text-white px-4 py-2 rounded shadow-md hover:bg-red-600 transition"
+              onClick={() => onGenerate(c.id, c.title, c.completedAt)}
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
             >
-              🔒 Wyloguj się
+              Pobierz certyfikat
             </button>
           </div>
-        ) : (
-          <p className="mt-4 text-gray-300">⏳ Ładowanie...</p>
-        )}
+        ))}
+      </div>
+    </>
+  );
+}
+function Notifications({ items, onDelete }) {
+  return (
+    <>
+      <h2 className="text-2xl font-semibold mb-4">Powiadomienia</h2>
+      <div className="space-y-2">
+        {items.map((n, idx) => (
+          <div
+            key={idx}
+            className="bg-white p-3 rounded-lg shadow flex justify-between items-center"
+          >
+            <div>
+              <p className="font-medium">{n.message}</p>
+              <p className="text-sm text-gray-500">
+                {n.timestamp
+                  ? new Date(n.timestamp.seconds * 1000).toLocaleString()
+                  : "Brak daty"}
+              </p>
+            </div>
+            <button
+              onClick={() => onDelete(idx)}
+              className="text-red-500 hover:text-red-700"
+            >
+              ❌
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+function SettingsSection({
+  emailInput,
+  setEmailInput,
+  emailMsg,
+  onUpdateEmail,
+  oldPassword,
+  setOldPassword,
+  newPassword,
+  setNewPassword,
+  passMsg,
+  onChangePassword,
+}) {
+  return (
+    <div className="max-w-md bg-white p-6 rounded-lg shadow space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold mb-2">Ustawienia profilu</h2>
+        <label className="block font-medium mb-1">Adres e-mail</label>
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            className="flex-1 border p-2 rounded focus:outline-none focus:ring"
+          />
+          <button
+            onClick={onUpdateEmail}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Zaktualizuj
+          </button>
+        </div>
+        {emailMsg && <p className="text-sm text-red-600 mt-1">{emailMsg}</p>}
+      </div>
+
+      <div>
+        <h3 className="text-xl font-semibold mb-2">Zmiana hasła</h3>
+        <label className="block font-medium mb-1">Stare hasło</label>
+        <input
+          type="password"
+          value={oldPassword}
+          onChange={(e) => setOldPassword(e.target.value)}
+          className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
+        />
+        <label className="block font-medium mb-1">Nowe hasło</label>
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
+        />
+        <button
+          onClick={onChangePassword}
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+        >
+          Zmień hasło
+        </button>
+        {passMsg && <p className="text-sm text-red-600 mt-1">{passMsg}</p>}
       </div>
     </div>
   );
