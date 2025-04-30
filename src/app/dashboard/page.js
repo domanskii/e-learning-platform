@@ -12,8 +12,8 @@ import {
 import {
   doc,
   getDoc,
-  updateDoc,
   getDocs,
+  updateDoc,
   collection,
 } from "firebase/firestore";
 import Link from "next/link";
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [completedDetails, setCompletedDetails] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [lastActivity, setLastActivity] = useState([]);
+  const [newsItems, setNewsItems] = useState([]);
   const [tipIndex, setTipIndex] = useState(0);
   const [activeSection, setActiveSection] = useState("dashboard");
   const [stats, setStats] = useState({ inProgress: 0, completed: 0, notifications: 0, total: 0 });
@@ -50,21 +51,30 @@ export default function Dashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [passMsg, setPassMsg] = useState("");
 
-  // Rotate daily tip every 20 seconds
+  // Rotate daily tip every 20s
   useEffect(() => {
     const interval = setInterval(() => {
-      setTipIndex((i) => (i + 1) % dailyTips.length);
+      setTipIndex(i => (i + 1) % dailyTips.length);
     }, 20000);
     return () => clearInterval(interval);
   }, []);
 
-  // Listen auth state and fetch data
+  // Fetch news items
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (u) => {
-      if (!u) {
-        router.push("/auth");
-        return;
-      }
+    async function fetchNews() {
+      const snap = await getDocs(collection(db, "news"));
+      const items = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(n => n.isActive);
+      setNewsItems(items);
+    }
+    fetchNews();
+  }, []);
+
+  // Auth state & fetch user data
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async u => {
+      if (!u) return router.push("/auth");
       setUser(u);
       setEmailInput(u.email || "");
       const uSnap = await getDoc(doc(db, "users", u.uid));
@@ -75,64 +85,51 @@ export default function Dashboard() {
       setNotifications(data.notifications || []);
       computeStats(data);
     });
-    return () => unsub();
+    return unsub;
   }, [router]);
 
   // Fetch assigned course details
   useEffect(() => {
     if (!assignedCourses.length) return;
-    (async () => {
-      const arr = await Promise.all(
-        assignedCourses.map(async (id) => {
-          const snap = await getDoc(doc(db, "courses", id));
-          return { id, title: snap.data()?.title || "-" };
-        })
-      );
-      setAssignedDetails(arr);
-    })();
+    Promise.all(
+      assignedCourses.map(async id => {
+        const snap = await getDoc(doc(db, "courses", id));
+        return { id, title: snap.data()?.title || "-" };
+      })
+    ).then(setAssignedDetails);
   }, [assignedCourses]);
 
   // Fetch completed course details
   useEffect(() => {
     if (!completedCourses.length) return;
-    (async () => {
-      const arr = await Promise.all(
-        completedCourses.map(async (c) => {
-          const id = c.courseId;
-          const snap = await getDoc(doc(db, "courses", id));
-          return { id, title: snap.data()?.title || "-", completedAt: c.completedAt };
-        })
-      );
-      setCompletedDetails(arr);
-    })();
+    Promise.all(
+      completedCourses.map(c =>
+        getDoc(doc(db, "courses", c.courseId)).then(snap => ({
+          id: c.courseId,
+          title: snap.data()?.title || "-",
+          completedAt: c.completedAt,
+        }))
+      )
+    ).then(setCompletedDetails);
   }, [completedCourses]);
 
-  // Build last activity when notifications or completedDetails change
+  // Build last activity
   useEffect(() => {
     const acts = [];
-    notifications.forEach((n) => {
-      acts.push({ message: n.message, timestamp: n.timestamp?.seconds * 1000 || Date.now() });
-    });
-    completedDetails.forEach((c) => {
-      acts.push({
-        message: `Ukończyłeś kurs: ${c.title}`,
-        timestamp: c.completedAt?.seconds * 1000 || Date.now(),
-      });
-    });
+    notifications.forEach(n => acts.push({ message: n.message, timestamp: n.timestamp?.seconds * 1000 || Date.now() }));
+    completedDetails.forEach(c => acts.push({ message: `Ukończyłeś kurs: ${c.title}`, timestamp: c.completedAt?.seconds * 1000 || Date.now() }));
     acts.sort((a, b) => b.timestamp - a.timestamp);
     setLastActivity(acts.slice(0, 5));
   }, [notifications, completedDetails]);
 
-  // Compute stats helper
-  const computeStats = (data) => {
-    const inProg = data.assignedCourses?.length || 0;
-    const comp = data.completedCourses?.length || 0;
-    const notif = data.notifications?.length || 0;
-    setStats({ inProgress: inProg, completed: comp, notifications: notif, total: inProg + comp });
+  // Compute stats, exclude completed from in-progress
+  const computeStats = data => {
+    const compIds = data.completedCourses?.map(c => c.courseId) || [];
+    const inProgIds = (data.assignedCourses || []).filter(id => !compIds.includes(id));
+    setStats({ inProgress: inProgIds.length, completed: compIds.length, notifications: data.notifications?.length || 0, total: inProgIds.length + compIds.length });
   };
 
-  const handleDeleteNotification = async (i) => {
-    if (!user) return;
+  const handleDeleteNotification = async i => {
     const updated = notifications.filter((_, idx) => idx !== i);
     await updateDoc(doc(db, "users", user.uid), { notifications: updated });
     setNotifications(updated);
@@ -149,42 +146,36 @@ export default function Dashboard() {
     pdf.text(`CERTYFIKAT UKOŃCZENIA KURSU: ${title}`, 20, 30);
     pdf.setFontSize(16);
     pdf.text(`Gratulacje, ${user.email}!`, 20, 50);
-    const date = completedAt
-      ? new Date(completedAt.seconds * 1000).toLocaleDateString("pl-PL")
-      : "-";
+    const date = completedAt ? new Date(completedAt.seconds * 1000).toLocaleDateString("pl-PL") : "-";
     pdf.text(`Ukończono: ${date}`, 20, 70);
     pdf.save(`Certyfikat_${id}.pdf`);
   };
 
   const handleUpdateEmail = async () => {
-    setEmailMsg("");
     try {
       await fbUpdateEmail(user, emailInput);
       await updateDoc(doc(db, "users", user.uid), { email: emailInput });
       setEmailMsg("E-mail zaktualizowany");
-    } catch (err) {
-      setEmailMsg(err.message);
-    }
+    } catch (err) { setEmailMsg(err.message); }
   };
 
   const handleChangePassword = async () => {
-    setPassMsg("");
     try {
       const cred = EmailAuthProvider.credential(user.email || "", oldPassword);
       await reauthenticateWithCredential(user, cred);
       await fbUpdatePassword(user, newPassword);
       setPassMsg("Hasło zmienione pomyślnie");
-      setOldPassword("");
-      setNewPassword("");
-    } catch (err) {
-      setPassMsg(err.message);
-    }
+      setOldPassword(""); setNewPassword("");
+    } catch (err) { setPassMsg(err.message); }
   };
 
   if (!user) return null;
 
+  const inProgressDetails = assignedDetails.filter(a => !completedDetails.some(c => c.id === a.id));
+
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800">
+      {/* Sidebar */}
       <nav className="w-64 bg-white shadow-lg p-6 flex flex-col">
         <h1 className="text-2xl font-bold mb-8">Dashboard</h1>
         <MenuButton icon="🏠" label="Przegląd" active={activeSection === "dashboard"} onClick={() => setActiveSection("dashboard")} />
@@ -194,20 +185,26 @@ export default function Dashboard() {
         <MenuButton icon="⚙️" label="Ustawienia" active={activeSection === "settings"} onClick={() => setActiveSection("settings")} />
         <button onClick={handleLogout} className="mt-auto bg-red-500 text-white py-2 rounded hover:bg-red-600">Wyloguj</button>
       </nav>
+
+      {/* Main content */}
       <main className="flex-1 p-8 overflow-auto">
         {activeSection === "dashboard" && (
           <>
             <h2 className="text-3xl font-bold mb-4">Przegląd</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
               <StatCard label="W trakcie" value={stats.inProgress} />
               <StatCard label="Ukończone" value={stats.completed} />
               <StatCard label="Powiadomienia" value={stats.notifications} />
               <StatCard label="Wszystkie kursy" value={stats.total} />
             </div>
+
+            {/* Porada dnia */}
             <div className="bg-yellow-200 p-4 rounded-lg mb-6">
               <h3 className="font-semibold">Porada dnia:</h3>
               <p>{dailyTips[tipIndex]}</p>
             </div>
+
+            {/* Ostatnia aktywność */}
             <div className="mb-6">
               <h3 className="text-xl font-semibold mb-2">Ostatnia aktywność</h3>
               <ul className="list-disc list-inside">
@@ -215,26 +212,46 @@ export default function Dashboard() {
                   ? lastActivity.map((act, i) => (
                       <li key={i} className="text-sm">
                         {act.message} –{' '}
-                        <span className="italic">
-                          {new Date(act.timestamp).toLocaleString()}
-                        </span>
+                        <span className="italic">{new Date(act.timestamp).toLocaleString()}</span>
                       </li>
                     ))
                   : <li className="text-sm">Brak aktywności</li>
                 }
               </ul>
             </div>
+
+            {/* Nowinki ze świata drogowego */}
             <div>
               <h3 className="text-xl font-semibold mb-2">Nowinki ze świata drogowego</h3>
               <div className="bg-white p-4 rounded-lg shadow text-gray-700">
-                <p className="italic">Brak nowinek. Czekaj na aktualizacje!</p>
+                {newsItems.length ? (
+                  newsItems.map(n => (
+                    <div key={n.id} className="mb-4">
+                      <h4 className="font-semibold">{n.title}</h4>
+                      <p>{n.content}</p>
+                      {n.buttonLabel && n.buttonLink && (
+                        <a
+                          href={n.buttonLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        >
+                          {n.buttonLabel}
+                        </a>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="italic">Brak nowinek. Czekaj na aktualizacje!</p>
+                )}
               </div>
             </div>
           </>
         )}
-        {activeSection === "courses" && <CourseCards courses={assignedDetails} />}
-        {activeSection === "completed" && <CompletedSection details={completedDetails} onGenerate={handleGenerateCertificate} />}
-        {activeSection === "notifications" && <Notifications items={notifications} onDelete={handleDeleteNotification} />}
+
+        {activeSection === "courses" && <CourseCards courses={inProgressDetails} />}  
+        {activeSection === "completed" && <CompletedSection details={completedDetails} onGenerate={handleGenerateCertificate} />}  
+        {activeSection === "notifications" && <Notifications items={notifications} onDelete={handleDeleteNotification} />}  
         {activeSection === "settings" && (
           <SettingsSection
             emailInput={emailInput}
@@ -261,8 +278,7 @@ function MenuButton({ icon, label, active, onClick }) {
       onClick={onClick}
       className={`flex items-center gap-2 mb-4 p-2 rounded hover:bg-gray-200 ${active ? "bg-gray-200 font-semibold" : ""}`}
     >
-      <span>{icon}</span>
-      {label}
+      <span>{icon}</span>{label}
     </button>
   );
 }
@@ -277,18 +293,10 @@ function StatCard({ label, value }) {
 function CourseCards({ courses }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {courses.map((c) => (
-        <div
-          key={c.id}
-          className="bg-blue-500 text-white rounded-lg p-6 shadow hover:shadow-lg transition"
-        >
+      {courses.map(c => (
+        <div key={c.id} className="bg-blue-500 text-white rounded-lg p-6 shadow hover:shadow-lg transition">
           <h3 className="text-xl font-semibold mb-2">{c.title}</h3>
-          <Link
-            href={`/courses/${c.id}`}
-            className="bg-white text-blue-600 px-4 py-2 rounded"
-          >
-            Kontynuuj →
-          </Link>
+          <Link href={`/courses/${c.id}`} className="bg-white text-blue-600 px-4 py-2 rounded">Kontynuuj →</Link>
         </div>
       ))}
     </div>
@@ -299,16 +307,10 @@ function CompletedSection({ details, onGenerate }) {
     <>
       <h2 className="text-2xl font-semibold mb-4">Ukończone kursy</h2>
       <div className="space-y-4">
-        {details.map((c) => (
-          <div
-            key={c.id}
-            className="bg-white p-4 rounded-lg shadow flex justify-between items-center"
-          >
+        {details.map(c => (
+          <div key={c.id} className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
             <p className="font-medium">{c.title}</p>
-            <button
-              onClick={() => onGenerate(c.id, c.title, c.completedAt)}
-              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-            >
+            <button onClick={() => onGenerate(c.id, c.title, c.completedAt)} className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
               Pobierz certyfikat
             </button>
           </div>
@@ -323,24 +325,12 @@ function Notifications({ items, onDelete }) {
       <h2 className="text-2xl font-semibold mb-4">Powiadomienia</h2>
       <div className="space-y-2">
         {items.map((n, idx) => (
-          <div
-            key={idx}
-            className="bg-white p-3 rounded-lg shadow flex justify-between items-center"
-          >
+          <div key={idx} className="bg-white p-3 rounded-lg shadow flex justify-between items-center">
             <div>
               <p className="font-medium">{n.message}</p>
-              <p className="text-sm text-gray-500">
-                {n.timestamp
-                  ? new Date(n.timestamp.seconds * 1000).toLocaleString()
-                  : "Brak daty"}
-              </p>
+              <p className="text-sm text-gray-500">{n.timestamp ? new Date(n.timestamp.seconds * 1000).toLocaleString() : "Brak daty"}</p>
             </div>
-            <button
-              onClick={() => onDelete(idx)}
-              className="text-red-500 hover:text-red-700"
-            >
-              ❌
-            </button>
+            <button onClick={() => onDelete(idx)} className="text-red-500 hover:text-red-700">❌</button>
           </div>
         ))}
       </div>
@@ -365,18 +355,8 @@ function SettingsSection({
         <h2 className="text-2xl font-semibold mb-2">Ustawienia profilu</h2>
         <label className="block font-medium mb-1">Adres e-mail</label>
         <div className="flex gap-2">
-          <input
-            type="email"
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
-            className="flex-1 border p-2 rounded focus:outline-none focus:ring"
-          />
-          <button
-            onClick={onUpdateEmail}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Zaktualizuj
-          </button>
+          <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} className="flex-1 border p-2 rounded focus:outline-none focus:ring" />
+          <button onClick={onUpdateEmail} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Zaktualizuj</button>
         </div>
         {emailMsg && <p className="text-sm text-red-600 mt-1">{emailMsg}</p>}
       </div>
@@ -384,25 +364,10 @@ function SettingsSection({
       <div>
         <h3 className="text-xl font-semibold mb-2">Zmiana hasła</h3>
         <label className="block font-medium mb-1">Stare hasło</label>
-        <input
-          type="password"
-          value={oldPassword}
-          onChange={(e) => setOldPassword(e.target.value)}
-          className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
-        />
+        <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring" />
         <label className="block font-medium mb-1">Nowe hasło</label>
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
-        />
-        <button
-          onClick={onChangePassword}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-        >
-          Zmień hasło
-        </button>
+        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring" />
+        <button onClick={onChangePassword} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Zmień hasło</button>
         {passMsg && <p className="text-sm text-red-600 mt-1">{passMsg}</p>}
       </div>
     </div>

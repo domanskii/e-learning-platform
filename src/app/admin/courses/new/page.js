@@ -6,113 +6,108 @@ import { collection, addDoc } from "firebase/firestore";
 
 export default function CreateCoursePage() {
   const router = useRouter();
-
-  // Pola wymagane przy tworzeniu nowego kursu
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
-  const [content, setContent] = useState(""); // Przykładowe pole na treść kursu
-
-  const [message, setMessage] = useState("");
+  const [content, setContent] = useState("");
+  const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleCreateCourse = async () => {
-    // Podstawowa walidacja
     if (!title || !description || !content) {
-      setMessage("❌ Wypełnij wszystkie wymagane pola!");
+      setMessage({ type: "error", text: "❌ Wypełnij wszystkie wymagane pola!" });
       return;
     }
-
     setLoading(true);
-    setMessage("");
+    setMessage(null);
 
     try {
-      // Tworzenie nowego kursu w Firestore
       const newCourseRef = await addDoc(collection(db, "courses"), {
         title,
         description,
         content,
         videoUrl: videoUrl.trim() !== "" ? videoUrl : null,
-        // Pusta tablica modułów zgodna ze strukturą używaną w edycji
         modules: [],
         isActive: true,
       });
 
-      setMessage("✅ Kurs dodany pomyślnie!");
-
-      // Przekierowanie do widoku edycji nowo utworzonego kursu
+      setMessage({ type: "success", text: "✅ Kurs dodany pomyślnie!" });
       router.push(`/admin/courses/${newCourseRef.id}/edit`);
     } catch (error) {
       console.error("❌ Błąd zapisu kursu:", error);
-      setMessage("❌ Wystąpił błąd przy dodawaniu kursu.");
+      setMessage({ type: "error", text: "❌ Wystąpił błąd przy dodawaniu kursu." });
     }
 
     setLoading(false);
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gray-900 text-white">
-      <div className="bg-gray-800/80 p-8 rounded-lg shadow-lg w-full max-w-3xl">
-        <h1 className="text-3xl font-bold text-center">➕ Dodaj nowy kurs</h1>
+    <div className="flex h-screen bg-gray-100 text-gray-800">
+      <main className="flex-1 p-8 overflow-auto">
+        <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow">
+          <h1 className="text-2xl font-bold mb-4 text-center">➕ Dodaj nowy kurs</h1>
 
-        {message && (
-          <p className="mt-2 text-lg text-red-400 text-center">{message}</p>
-        )}
+          {message && (
+            <p
+              className={`mb-4 text-center ${
+                message.type === "error" ? "text-red-600" : "text-green-600"
+              }`}
+            >
+              {message.text}
+            </p>
+          )}
 
-        {/* Pola kursu */}
-        <div className="mt-6 p-4 bg-gray-700 rounded shadow-md w-full">
-          <input
-            type="text"
-            placeholder="Tytuł kursu"
-            className="border p-2 rounded w-full text-white bg-gray-600 placeholder-gray-300"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-          <textarea
-            placeholder="Opis kursu"
-            className="border p-2 rounded w-full text-white bg-gray-600 placeholder-gray-300 mt-2"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Link do YouTube (opcjonalnie)"
-            className="border p-2 rounded w-full text-white bg-gray-600 placeholder-gray-300 mt-2"
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-          />
+          <section className="mb-6">
+            <input
+              type="text"
+              placeholder="Tytuł kursu"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full border p-2 mb-4 rounded focus:outline-none focus:ring"
+            />
+            <textarea
+              placeholder="Opis kursu"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full border p-2 mb-4 rounded focus:outline-none focus:ring"
+              rows={3}
+            />
+            <input
+              type="text"
+              placeholder="Link do YouTube (opcjonalnie)"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              className="w-full border p-2 rounded focus:outline-none focus:ring"
+            />
+          </section>
+
+          <section className="mb-6">
+            <h2 className="text-lg font-semibold mb-2">📖 Treść kursu</h2>
+            <textarea
+              placeholder="Wprowadź treść merytoryczną kursu..."
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="w-full border p-2 rounded focus:outline-none focus:ring"
+              rows={5}
+            />
+          </section>
+
+          <button
+            onClick={handleCreateCourse}
+            disabled={loading}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition mb-2"
+          >
+            {loading ? "⏳ Tworzenie kursu..." : "💾 Utwórz kurs"}
+          </button>
+
+          <button
+            onClick={() => router.push("/admin")}
+            className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition"
+          >
+            ↩️ Powrót
+          </button>
         </div>
-
-        {/* Treść kursu */}
-        <div className="mt-6 p-4 bg-gray-700 rounded shadow-md w-full">
-          <h2 className="text-lg font-semibold text-white">📖 Treść kursu</h2>
-          <textarea
-            placeholder="Wprowadź treść merytoryczną kursu..."
-            className="border p-2 rounded w-full text-white bg-gray-600 placeholder-gray-300 mt-2"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            required
-          />
-        </div>
-
-        {/* Przyciski akcji */}
-        <button
-          className="mt-6 bg-blue-500 text-white px-4 py-2 rounded shadow-md hover:bg-blue-600 transition w-full"
-          onClick={handleCreateCourse}
-          disabled={loading}
-        >
-          {loading ? "⏳ Tworzenie kursu..." : "💾 Utwórz kurs"}
-        </button>
-
-        <button
-          className="mt-4 bg-gray-500 text-white px-4 py-2 rounded shadow-md hover:bg-gray-600 transition w-full"
-          onClick={() => router.push("/admin")}
-        >
-          ↩️ Powrót
-        </button>
-      </div>
+      </main>
     </div>
   );
 }

@@ -7,144 +7,118 @@ import Link from "next/link";
 
 export default function ManageCourses() {
   const router = useRouter();
-
   const [courses, setCourses] = useState([]);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const coursesSnapshot = await getDocs(collection(db, "courses"));
-        setCourses(
-          coursesSnapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          }))
-        );
-      } catch (error) {
-        console.error("❌ Błąd pobierania kursów:", error);
+        const snapshot = await getDocs(collection(db, "courses"));
+        setCourses(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("❌ Błąd pobierania kursów:", err);
       }
     };
-
     fetchCourses();
   }, []);
 
-  const handleToggleCourseStatus = async (courseId, currentStatus) => {
+  const toggleStatus = async (id, isActive) => {
     try {
-      await updateDoc(doc(db, "courses", courseId), { isActive: !currentStatus });
-      setCourses((prevCourses) =>
-        prevCourses.map((course) =>
-          course.id === courseId ? { ...course, isActive: !currentStatus } : course
-        )
+      await updateDoc(doc(db, "courses", id), { isActive: !isActive });
+      setCourses((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, isActive: !isActive } : c))
       );
-    } catch (error) {
-      console.error("❌ Błąd zmiany statusu kursu:", error);
+    } catch (err) {
+      console.error("❌ Błąd zmiany statusu:", err);
     }
   };
 
-  const handleDeleteCourse = async (courseId) => {
-    const confirmDelete = confirm(
-      "Czy na pewno chcesz usunąć ten kurs? ❌ Tej operacji nie można cofnąć!"
-    );
-    if (!confirmDelete) return;
-
+  const removeCourse = async (id) => {
+    if (!confirm("Czy na pewno usunąć kurs?❌")) return;
     try {
-      await deleteDoc(doc(db, "courses", courseId));
-      setCourses((prevCourses) => prevCourses.filter((course) => course.id !== courseId));
-      alert("🗑️ Kurs został usunięty!");
-    } catch (error) {
-      console.error("❌ Błąd usuwania kursu:", error);
+      await deleteDoc(doc(db, "courses", id));
+      setCourses((prev) => prev.filter((c) => c.id !== id));
+      alert("🗑️ Kurs usunięty.");
+    } catch (err) {
+      console.error("❌ Błąd usuwania kursu:", err);
     }
   };
 
-  // Filtrowanie kursów (aktywnych, nieaktywnych, wszystkie)
-  const filteredCourses = courses.filter((course) => {
-    if (filter === "active") return course.isActive;
-    if (filter === "inactive") return !course.isActive;
+  const filtered = courses.filter((c) => {
+    if (filter === "active") return c.isActive;
+    if (filter === "inactive") return !c.isActive;
     return true;
   });
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gray-900 text-white">
-      <div className="bg-gray-800/80 p-8 rounded-lg shadow-lg w-full max-w-4xl">
-        <h1 className="text-3xl font-bold">⚙️ Zarządzaj kursami</h1>
+    <div className="flex h-screen bg-gray-100 text-gray-800">
+      <main className="flex-1 p-8 overflow-auto">
+        <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+          <h1 className="text-2xl font-bold mb-4">⚙️Panel zarządzania kursami</h1>
 
-        {/* Filtry */}
-        <div className="flex gap-4 mt-6">
+          <div className="flex gap-4 mb-6">
+            {[
+              { key: 'all', label: 'Wszystkie' },
+              { key: 'active', label: 'Aktywne' },
+              { key: 'inactive', label: 'Nieaktywne' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-4 py-2 rounded shadow-md transition ${
+                  filter === key
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <ul className="space-y-4">
+            {filtered.map((course) => (
+              <li
+                key={course.id}
+                className="flex justify-between items-center border p-4 rounded-lg shadow-sm"
+              >
+                <span className="font-medium text-gray-900">{course.title}</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => toggleStatus(course.id, course.isActive)}
+                    className={`px-3 py-1 rounded transition ${
+                      course.isActive
+                        ? 'bg-red-500 text-white hover:bg-red-600'
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                    }`}
+                  >
+                    {course.isActive ? '❌ Dezaktywuj' : '✅ Aktywuj'}
+                  </button>
+                  <Link
+                    href={`/admin/manage-courses/${course.id}/students`}
+                    className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition"
+                  >
+                    👥 Kursanci
+                  </Link>
+                  <button
+                    onClick={() => removeCourse(course.id)}
+                    className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition"
+                  >
+                    🗑️ Usuń
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
           <button
-            className={`px-4 py-2 rounded shadow-md transition ${
-              filter === "all"
-                ? "bg-blue-500 text-white hover:bg-blue-600"
-                : "bg-gray-600 text-gray-200 hover:bg-gray-700"
-            }`}
-            onClick={() => setFilter("all")}
+            onClick={() => router.push("/admin")}
+            className="mt-6 text-gray-600 hover:underline"
           >
-            Wszystkie
-          </button>
-          <button
-            className={`px-4 py-2 rounded shadow-md transition ${
-              filter === "active"
-                ? "bg-green-500 text-white hover:bg-green-600"
-                : "bg-gray-600 text-gray-200 hover:bg-gray-700"
-            }`}
-            onClick={() => setFilter("active")}
-          >
-            Aktywne
-          </button>
-          <button
-            className={`px-4 py-2 rounded shadow-md transition ${
-              filter === "inactive"
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-gray-600 text-gray-200 hover:bg-gray-700"
-            }`}
-            onClick={() => setFilter("inactive")}
-          >
-            Nieaktywne
+            ↩️ Powrót
           </button>
         </div>
-
-        {/* Lista kursów */}
-        <ul className="mt-6 w-full">
-          {filteredCourses.map((course) => (
-            <li
-              key={course.id}
-              className="p-3 bg-gray-700 text-white font-semibold rounded shadow-md flex justify-between items-center mt-3"
-            >
-              <span className="text-lg">{course.title}</span>
-              <div className="flex gap-2">
-                <button
-                  className={`px-3 py-1 rounded shadow-md transition ${
-                    course.isActive ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
-                  }`}
-                  onClick={() => handleToggleCourseStatus(course.id, course.isActive)}
-                >
-                  {course.isActive ? "❌ Dezaktywuj" : "✅ Aktywuj"}
-                </button>
-                <Link
-                  href={`/admin/manage-courses/${course.id}/students`}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded shadow-md transition"
-                >
-                  👥 Kursanci
-                </Link>
-                <button
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow-md transition"
-                  onClick={() => handleDeleteCourse(course.id)}
-                >
-                  🗑️ Usuń kurs
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {/* Przycisk powrotu */}
-        <button
-          className="mt-6 bg-gray-500 text-white px-4 py-2 rounded shadow-md hover:bg-gray-600 transition"
-          onClick={() => router.push("/admin")}
-        >
-          ↩️ Powrót
-        </button>
-      </div>
+      </main>
     </div>
   );
 }
