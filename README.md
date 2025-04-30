@@ -6,3 +6,6 @@ Wszystkie pliki skrypty znajdują się w src<app:
 - admin -> widok i funkcje dostępne zaraz po zalogowaniu do panelu
 - courses -> pliki .js dotyczące kursów
 - dashboard -> panel użytkownika
+- messages -> wiadomości/powiadomienia wysyłane z poziomu panelu admina do konkretnego usera
+NOWOŚĆ 4.30
+- nowinki -> możliwość dodawania nowinek ze świata drogowego i nie tylko. Dodawanie z poziomu admina (zrobione), widok w userze na dashboardzie (do zrobienia)
