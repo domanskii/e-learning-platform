@@ -78,7 +78,7 @@ export default function CourseStudents() {
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800">
-      {/* Sidebar can stay in layout */}
+      {/* Sidebar*/}
       <main className="flex-1 p-8 overflow-auto">
         <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
           <h1 className="text-2xl font-bold mb-2">👥 Kursanci kursu {courseTitle}</h1>

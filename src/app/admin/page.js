@@ -26,13 +26,13 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
 
-  // Add User form state
+  //dodawanie uzytkownika
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [addError, setAddError] = useState("");
   const [addSuccess, setAddSuccess] = useState("");
 
-  // News form state
+  //nowinki - do zrobienia
   const [newsTitle, setNewsTitle] = useState("");
   const [newsContent, setNewsContent] = useState("");
   const [newsActive, setNewsActive] = useState(true);
@@ -71,7 +71,7 @@ export default function AdminPage() {
     router.push("/");
   };
 
-  // User management
+  //zarzadzanie uzytkownikiem
   const handleAddUser = async e => {
     e.preventDefault();
     setAddError(""); setAddSuccess("");
@@ -121,7 +121,7 @@ export default function AdminPage() {
     }
   };
 
-  // News management
+  //nowinki - zarzadzanie 
   const handleAddNews = async () => {
     setNewsError(""); setNewsSuccess("");
     if (!newsTitle.trim() || !newsContent.trim()) {
@@ -166,7 +166,6 @@ export default function AdminPage() {
     }
   };
 
-  // Handle inline edit state for news
   const handleEditNewsField = (id, field, value) => {
     setNews(prev => prev.map(item =>
       item.id === id ? { ...item, [field]: value } : item
@@ -174,21 +173,60 @@ export default function AdminPage() {
   };
 
   if (loading) return <p className="text-center mt-10">Ładowanie...</p>;
-
+//panel nawigacji admina
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800">
-      <nav className="w-64 bg-white shadow p-6 flex flex-col">
-        <h2 className="text-2xl font-bold mb-6">Panel Admina</h2>
-        <button onClick={() => setActiveTab("home")} className={`mb-2 text-left ${activeTab === "home" ? "font-semibold text-gray-900" : "text-gray-600 hover:text-gray-900"}`}>🏠 Strona główna</button>
-        <button onClick={() => setActiveTab("users")} className={`mb-2 text-left ${activeTab === "users" ? "font-semibold text-gray-900" : "text-gray-600 hover:text-gray-900"}`}>👥 Użytkownicy</button>
-        <button onClick={() => setActiveTab("addUser")} className={`mb-2 text-left ${activeTab === "addUser" ? "font-semibold text-gray-900" : "text-gray-600 hover:text-gray-900"}`}>➕ Dodaj użytkownika</button>
-        <button onClick={() => setActiveTab("courses")} className={`mb-2 text-left ${activeTab === "courses" ? "font-semibold text-gray-900" : "text-gray-600 hover:text-gray-900"}`}>📚 Dodane kursy</button>
-        <button onClick={() => router.push("/admin/manage-courses")} className="mb-2 text-gray-600 hover:text-gray-900 text-left">⚙️ Zarządzaj kursami</button>
-        <button onClick={() => router.push("/admin/courses/new")} className="mb-2 text-gray-600 hover:text-gray-900 text-left">➕ Dodaj kurs</button>
-        <button onClick={() => setActiveTab("news")} className={`mb-2 text-left ${activeTab === "news" ? "font-semibold text-gray-900" : "text-gray-600 hover:text-gray-900"}`}>📰 Nowinki</button>
-        <button onClick={() => router.push("/admin/messages/send")} className="mb-2 text-gray-600 hover:text-gray-900 text-left">📩 Wyślij wiadomość</button>
-        <button onClick={handleLogout} className="mt-auto bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">🔒 Wyloguj</button>
-      </nav>
+<nav className="w-64 bg-white shadow p-6 flex flex-col">
+  <h2 className="text-2xl font-bold mb-6">Panel Admina</h2>
+  <button onClick={() => setActiveTab("home")} className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "home"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`}  >🏠 Strona główna </button>
+  <button onClick={() => setActiveTab("users")} className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "users"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`}  >👥 Użytkownicy </button>
+  <button
+    onClick={() => setActiveTab("addUser")}
+    className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "addUser"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`} > ➕ Dodaj użytkownika </button>
+  <button
+    onClick={() => setActiveTab("courses")}
+    className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "courses"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`} > 📚 Dodane kursy </button>
+  <button
+    onClick={() => router.push("/admin/manage-courses")}
+    className="mb-2 px-4 py-2 text-left text-gray-600 hover:text-gray-900"
+  > ⚙️ Zarządzaj kursami </button>
+  <button
+    onClick={() => router.push("/admin/courses/new")}
+    className="mb-2 px-4 py-2 text-left text-gray-600 hover:text-gray-900"
+  > ➕ Dodaj kurs </button>
+  <button
+    onClick={() => setActiveTab("news")}
+    className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "news"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`} > 📰 Nowinki </button>
+  <button
+    onClick={() => router.push("/admin/messages/send")}
+    className="mb-2 px-4 py-2 text-left text-gray-600 hover:text-gray-900"
+  > 📩 Wyślij wiadomość</button>
+  <button
+    onClick={handleLogout}
+    className="mt-auto bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+  >🔒 Wyloguj</button>
+</nav>
+
       <main className="flex-1 p-8 overflow-auto">
         {activeTab === "home" && <HomeView users={users} auth={auth} />}
         {activeTab === "users" && <UserList users={users} onBlock={handleBlock} onDelete={handleDeleteUser} />}
@@ -200,7 +238,7 @@ export default function AdminPage() {
   );
 }
 
-// Components for views
+//main page panelu admina
 function HomeView({ users, auth }) {
   const total = users.length;
   const blockedCount = users.filter(u => u.isBlocked || (u.blockUntil?.toMillis() > Date.now())).length;

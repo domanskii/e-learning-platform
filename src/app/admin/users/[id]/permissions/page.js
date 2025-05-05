@@ -5,7 +5,6 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useParams, useRouter } from "next/navigation";
 
 export default function ManagePermissions() {
-  // Upewnij się, że folder to [id], a tu destrukturyzujesz { id }
   const { id } = useParams();
   const router = useRouter();
 

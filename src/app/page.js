@@ -15,6 +15,7 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState("");
 
+//Tipy - strona logowania
   const tips = [
     'Pamiętaj o odblaskach – zwiększ swoją widoczność.',
     'Sprawdzaj ciśnienie w oponach przed trasą.',
@@ -24,7 +25,6 @@ export default function AuthPage() {
   const [tipIndex, setTipIndex] = useState(0);
   const [fade, setFade] = useState(true);
 
-  // Rotate tips with fade effect
   useEffect(() => {
     const interval = setInterval(() => {
       setFade(false);
@@ -88,7 +88,7 @@ export default function AuthPage() {
 
   return (
     <div className="relative flex items-center justify-center min-h-screen overflow-hidden">
-      {/* Background image */}
+      {/*tlo */}
       <img
         src="/images/road.jpg"
         alt="Droga o świcie"
@@ -96,7 +96,7 @@ export default function AuthPage() {
       />
 
       <div className="z-10 flex flex-col items-center w-full max-w-sm px-6 py-8">
-        {/* Porada dnia above card */}
+        {/* Porada dnia*/}
         <div
           className={`mb-8 w-full bg-white rounded-full px-6 py-2 shadow transition-opacity duration-500 ${
             fade ? 'opacity-100' : 'opacity-0'

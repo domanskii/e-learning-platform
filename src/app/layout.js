@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "E-learning Platform",
-  description: "Platforma do nauki i quizów",
+  title: "Bezpieczny Start",
+  description: "Platforma e-learningowa doszkalająca młodych kierowców",
 };
 
 export default function RootLayout({ children }) {

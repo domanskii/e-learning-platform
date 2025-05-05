@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import jsPDF from "jspdf";
 
 export default function QuizPage() {
@@ -12,12 +12,12 @@ export default function QuizPage() {
 
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Przechowujemy wybrane odpowiedzi jako indeksy opcji
   const [answers, setAnswers] = useState({});
   const [score, setScore] = useState(null);
   const [userCompleted, setUserCompleted] = useState(false);
-  // Zapisujemy dane ukończenia, np. data ukończenia
   const [completionInfo, setCompletionInfo] = useState(null);
+  // Nowy stan na tytuł kursu
+  const [courseTitle, setCourseTitle] = useState("");
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -26,10 +26,14 @@ export default function QuizPage() {
         return;
       }
       try {
-        // Pobieramy dokument kursu (w którym quiz jest w module.test)
-        const courseDoc = await getDoc(doc(db, "courses", courseId));
+        // Pobieramy dokument kursu
+        const courseRef = doc(db, "courses", courseId);
+        const courseDoc = await getDoc(courseRef);
         if (courseDoc.exists()) {
           const courseData = courseDoc.data();
+          // Ustawiamy tytuł kursu
+          setCourseTitle(courseData.title || "");
+          // Znajdujemy quiz w modułach
           let quizData = null;
           if (courseData.modules && courseData.modules.length > 0) {
             for (const mod of courseData.modules) {
@@ -42,7 +46,6 @@ export default function QuizPage() {
           if (quizData) {
             setQuiz(quizData);
           } else {
-            console.error("Quiz nie istnieje!");
             alert("Quiz dla tego kursu nie został jeszcze przygotowany.");
             router.push(`/courses/${courseId}`);
             return;
@@ -51,18 +54,18 @@ export default function QuizPage() {
           console.error("Kurs nie istnieje!");
         }
 
-        // Sprawdzamy, czy użytkownik już ukończył kurs – teraz completedCourses jest tablicą obiektów { courseId, completedAt }
+        // Sprawdzamy, czy użytkownik już ukończył kurs
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
           const userData = userSnap.data();
           if (
             userData.completedCourses &&
-            userData.completedCourses.some((item) => item.courseId === courseId)
+            userData.completedCourses.some(item => item.courseId === courseId)
           ) {
             setUserCompleted(true);
             const comp = userData.completedCourses.find(
-              (item) => item.courseId === courseId
+              item => item.courseId === courseId
             );
             setCompletionInfo(comp);
           }
@@ -77,9 +80,8 @@ export default function QuizPage() {
     fetchQuiz();
   }, [courseId, user, router]);
 
-  // Zapisujemy indeks wybranej opcji zamiast tekstu
   const handleAnswer = (qIndex, optionIndex) => {
-    setAnswers((prev) => ({ ...prev, [qIndex]: optionIndex }));
+    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
   };
 
   const handleSubmit = async () => {
@@ -93,14 +95,12 @@ export default function QuizPage() {
     });
     setScore(correctCount);
 
-    // Jeśli użytkownik uzyskał 100% i jeszcze nie ukończył kursu – zapisz datę ukończenia
     if (correctCount === quiz.questions.length && user && !userCompleted) {
       try {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
           const userData = userSnap.data();
-          // Używamy new Date() zamiast serverTimestamp()
           const newCompletion = { courseId, completedAt: new Date() };
           const updated = userData.completedCourses
             ? [...userData.completedCourses, newCompletion]
@@ -113,10 +113,8 @@ export default function QuizPage() {
         console.error("Błąd zapisu ukończenia kursu:", err);
       }
     }
-    
   };
 
-  // Funkcja generująca certyfikat – dostępna tylko w pierwszym ukończeniu, nie przy kolejnych próbach na tej stronie
   const handleGenerateCertificate = () => {
     if (!user) return;
     const docPDF = new jsPDF();
@@ -127,9 +125,9 @@ export default function QuizPage() {
     docPDF.setFont("helvetica", "normal");
     docPDF.setFontSize(16);
     docPDF.text(`Gratulacje, ${user.email}!`, 20, 50);
-    docPDF.text(`Ukończyłeś kurs: ${courseId}`, 20, 70);
+    // Wyświetlamy tytuł zamiast ID
+    docPDF.text(`Ukończyłeś kurs: ${courseTitle}`, 20, 70);
 
-    // Jeśli mamy completionInfo, spróbuj sformatować datę (może wymagać dodatkowego pobrania serwera)
     docPDF.setFontSize(12);
     docPDF.text(
       `Data ukończenia: ${
@@ -141,7 +139,11 @@ export default function QuizPage() {
       90
     );
 
-    docPDF.save(`Certyfikat_${courseId}.pdf`);
+    // Zapis pliku z tytułem w nazwie
+    const fileName = courseTitle
+      ? `Certyfikat_${courseTitle.replace(/\s+/g, "_")}.pdf`
+      : `Certyfikat_${courseId}.pdf`;
+    docPDF.save(fileName);
   };
 
   if (!user) {
@@ -173,7 +175,8 @@ export default function QuizPage() {
   return (
     <div className="min-h-screen p-8 bg-gray-900 text-white flex flex-col items-center">
       <div className="bg-gray-800 p-6 rounded shadow max-w-2xl w-full">
-        <h1 className="text-2xl font-bold">Quiz – {courseId}</h1>
+        {/* Nagłówek z tytułem kursu */}
+        <h1 className="text-2xl font-bold">Quiz – {courseTitle}</h1>
 
         {score !== null ? (
           <div className="mt-4 text-center">
@@ -183,14 +186,11 @@ export default function QuizPage() {
             {userCompleted ? (
               <>
                 <p className="mt-2 text-green-400">
-                  Ukończyłeś kurs już wcześniej, data ukończenia:
-                  {" "}
+                 Gratulacje! udało ci się ukończyc kurs w dniu {" "}
                   {completionInfo && completionInfo.completedAt
                     ? new Date(completionInfo.completedAt.seconds * 1000).toLocaleString()
                     : "nieznana"}
                 </p>
-                {/* Na tej stronie nie pozwalamy już na pobieranie certyfikatu – 
-                    certyfikat pobierany będzie z dashboardu */}
               </>
             ) : (
               <>
