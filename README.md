@@ -9,11 +9,8 @@ Wszystkie pliki skrypty znajdują się w src<app:
 - courses -> pliki .js dotyczące kursów
 - dashboard -> panel użytkownika
 - messages -> wiadomości/powiadomienia wysyłane z poziomu panelu admina do konkretnego usera
-- nowinki -> możliwość dodawania nowinek ze świata drogowego i nie tylko. Dodawanie z poziomu admina (zrobione), widok w userze na dashboardzie (do zrobienia)
+- nowinki -> możliwość dodawania nowinek ze świata drogowego i nie tylko. Dodawanie z poziomu admina (tytuł, opis, widok), widok w userze na dashboardzie 
 
 
-Do zrobienia
-- nowinki -> widok nowniek dla usera
-- courses/quiz -> do weryfikacji:
-Quiz – QltvRGIc5l2GVygfuxWq (podmiana ID na tytuł kursu)
-Ukończyłeś kurs już wcześniej, data ukończenia: Invalid Date (do poprawienia data)
+Do zrobienia:
+-
