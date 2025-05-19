@@ -49,7 +49,8 @@ export default function Dashboard() {
     notifications: 0,
     total: 0,
   });
-
+  const [freeResources, setFreeResources] = useState([]);
+  const [selectedResource, setSelectedResource] = useState(null);
   // ustawienia
   const [emailInput, setEmailInput] = useState("");
   const [emailMsg, setEmailMsg] = useState("");
@@ -94,6 +95,16 @@ export default function Dashboard() {
     return unsub;
   }, [router]);
 
+  //darmowe materiały
+  useEffect(() => {
+    async function fetchFree() {
+      const snap = await getDocs(collection(db, "freeResources"));
+      setFreeResources(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    fetchFree();
+  }, []);
+
+  
   // kursy - widok dostępnych
   useEffect(() => {
     if (!assignedCourses.length) return;
@@ -248,7 +259,6 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  // Połączone kursy z flagą completed
   const coursesList = assignedDetails.map((c) => ({
     ...c,
     completed: completedDetails.some((d) => d.id === c.id),
@@ -258,12 +268,18 @@ export default function Dashboard() {
     <div className="flex h-screen bg-gray-100 text-gray-800">
       {/* Sidebar */}
       <nav className="w-64 bg-white shadow-lg p-6 flex flex-col">
-        <h1 className="text-2xl font-bold mb-8">Dashboard</h1>
+        <h1 className="text-2xl font-bold mb-8">Panel użytkownika</h1>
         <MenuButton
           icon="🏠"
-          label="Przegląd"
+          label="Strona główna"
           active={activeSection === "dashboard"}
           onClick={() => setActiveSection("dashboard")}
+        />
+          <MenuButton
+          icon="📂"
+          label="Darmowe materiały"
+          active={activeSection === "resources"}
+          onClick={() => setActiveSection("resources")}
         />
         <MenuButton
           icon="📚"
@@ -301,10 +317,10 @@ export default function Dashboard() {
       <main className="flex-1 p-8 overflow-auto">
         {activeSection === "dashboard" && (
           <>
-            <h2 className="text-3xl font-bold mb-4">Przegląd</h2>
+            <h2 className="text-3xl font-bold mb-4">Strona główna</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-              <StatCard label="W trakcie" value={stats.inProgress} />
-              <StatCard label="Ukończone" value={stats.completed} />
+              <StatCard label="Rozpoczęte kursy" value={stats.inProgress} />
+              <StatCard label="Ukończone kursy" value={stats.completed} />
               <StatCard
                 label="Powiadomienia"
                 value={stats.notifications}
@@ -398,6 +414,43 @@ export default function Dashboard() {
             onChangePassword={handleChangePassword}
           />
         )}
+{activeSection === "resources" && (
+  <div>
+    <h2 className="text-2xl font-semibold mb-4">Darmowe materiały</h2>
+    <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
+      {freeResources.length > 0 ? (
+        freeResources.map((r) => {
+          // wyciągamy ID z YouTube
+          const ytMatch = r.link.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+          const src = ytMatch
+            ? `https://www.youtube.com/embed/${ytMatch[1]}`
+            : r.link;
+          return (
+            <div
+              key={r.id}
+              className="bg-white/50 backdrop-blur-md p-4 rounded-xl shadow-lg text-gray-900 h-120"
+            >
+              <h3 className="text-lg font-semibold mb-2">{r.title}</h3>
+              <div className="aspect-w-16 aspect-h-9">
+                <iframe
+                  src={src}
+                  allowFullScreen
+                  className="w-full h-95 rounded-lg"
+                />
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        <p className="text-gray-600">Brak darmowych materiałów.</p>
+      )}
+    </div>
+  </div>
+)}
+
+
+
+
       </main>
     </div>
   );
@@ -436,6 +489,7 @@ function CourseCards({ courses }) {
   }
   return (
     <div className="space-y-4">
+      <h2 className="text-2xl font-semibold mb-4">Dostępne kursy</h2>
       {courses.map((c) => (
         <div
           key={c.id}

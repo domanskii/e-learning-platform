@@ -88,7 +88,6 @@ export default function AuthPage() {
 
   return (
     <div className="relative flex items-center justify-center min-h-screen overflow-hidden">
-      {/*tlo */}
       <img
         src="/images/road.jpg"
         alt="Droga o świcie"
@@ -96,7 +95,6 @@ export default function AuthPage() {
       />
 
       <div className="z-10 flex flex-col items-center w-full max-w-sm px-6 py-8">
-        {/* Porada dnia*/}
         <div
           className={`mb-8 w-full bg-white rounded-full px-6 py-2 shadow transition-opacity duration-500 ${
             fade ? 'opacity-100' : 'opacity-0'
@@ -107,7 +105,6 @@ export default function AuthPage() {
           </p>
         </div>
 
-        {/* Auth card */}
         <div className="flex flex-col items-center w-full bg-white/30 backdrop-blur-md rounded-xl p-8">
           <h1 className="text-2xl font-bold text-white mb-4">
             {isLogin ? "Logowanie" : "Rejestracja"}

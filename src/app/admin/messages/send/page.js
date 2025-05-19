@@ -73,7 +73,6 @@ export default function SendMessagePage() {
 
       {message && <p className="mt-2 text-lg text-red-500">{message}</p>}
 
-      {/* Wybór użytkownika */}
       <select
         className="border p-2 rounded w-full max-w-md mt-4"
         value={selectedUser}
@@ -85,7 +84,6 @@ export default function SendMessagePage() {
         ))}
       </select>
 
-      {/* Wybór gotowego powiadomienia */}
       <select
         className="border p-2 rounded w-full max-w-md mt-4"
         value={selectedTemplate}
@@ -97,7 +95,6 @@ export default function SendMessagePage() {
         ))}
       </select>
 
-      {/* Możliwość napisania własnej wiadomości */}
       <textarea
         className="border p-2 rounded w-full max-w-md mt-4"
         placeholder="Lub wpisz własną wiadomość..."
@@ -105,7 +102,6 @@ export default function SendMessagePage() {
         onChange={(e) => setCustomMessage(e.target.value)}
       />
 
-      {/* Przycisk wysyłania */}
       <button
         className="mt-4 bg-blue-500 text-white px-4 py-2 rounded shadow-md hover:bg-blue-600 transition"
         onClick={handleSendMessage}

@@ -39,6 +39,14 @@ export default function AdminPage() {
   const [newsError, setNewsError] = useState("");
   const [newsSuccess, setNewsSuccess] = useState("");
 
+  //darmowe materiały
+  const [freeResources, setFreeResources] = useState([]);
+  const [resTitle, setResTitle]       = useState("");
+  const [resLink, setResLink]         = useState("");
+  const [resError, setResError]       = useState("");
+  const [resSuccess, setResSuccess]   = useState("");
+
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, currentUser => {
       if (!currentUser || currentUser.email !== "admin@wsb.pl") {
@@ -53,14 +61,17 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [uSnap, cSnap, nSnap] = await Promise.all([
+      const [uSnap, cSnap, nSnap, rSnap] = await Promise.all([
         getDocs(collection(db, "users")),
         getDocs(collection(db, "courses")),
         getDocs(collection(db, "news")),
+        getDocs(collection(db, "freeResources")),
       ]);
       setUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCourses(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setNews(nSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setFreeResources(rSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
     } finally {
       setLoading(false);
     }
@@ -171,6 +182,57 @@ export default function AdminPage() {
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
+  // ➕ Dodaj materiał
+  const handleAddResource = async () => {
+    setResError(""); setResSuccess("");
+    if (!resTitle.trim() || !resLink.trim()) {
+      setResError("Tytuł i link są wymagane.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, "freeResources"), {
+        title: resTitle,
+        link:  resLink,
+        createdAt: new Date(),
+      });
+      setResSuccess("Dodano materiał!");
+      setResTitle(""); setResLink("");
+      fetchData();
+    } catch (err) {
+      setResError(err.message);
+    }
+  };
+
+  // ✏️ Edytuj materiał
+  const handleUpdateResource = async item => {
+    try {
+      await updateDoc(doc(db, "freeResources", item.id), {
+        title: item.title,
+        link:  item.link,
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 🗑️ Usuń materiał
+  const handleDeleteResource = async id => {
+    if (!confirm("Usunąć materiał?")) return;
+    try {
+      await deleteDoc(doc(db, "freeResources", id));
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Aktualizacja pola w liście przed zapisem
+  const handleEditResourceField = (id, field, value) => {
+    setFreeResources(prev =>
+      prev.map(r => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
 
   if (loading) return <p className="text-center mt-10">Ładowanie...</p>;
 //panel nawigacji admina
@@ -218,6 +280,17 @@ export default function AdminPage() {
         : "text-gray-600 hover:text-gray-900"
     }`} > 📰 Nowinki </button>
   <button
+    onClick={() => setActiveTab("free")}
+    className={`mb-2 px-4 py-2 text-left rounded ${
+      activeTab === "free"
+        ? "bg-gray-200 font-semibold text-gray-900"
+        : "text-gray-600 hover:text-gray-900"
+    }`}
+  >
+    📂 Darmowe materiały
+  </button>
+
+  <button
     onClick={() => router.push("/admin/messages/send")}
     className="mb-2 px-4 py-2 text-left text-gray-600 hover:text-gray-900"
   > 📩 Wyślij wiadomość</button>
@@ -233,6 +306,75 @@ export default function AdminPage() {
         {activeTab === "addUser" && <AddUserForm onSubmit={handleAddUser} newEmail={newEmail} setNewEmail={setNewEmail} newPassword={newPassword} setNewPassword={setNewPassword} addError={addError} addSuccess={addSuccess} />}
         {activeTab === "courses" && <CourseList courses={courses} />}
         {activeTab === "news" && <NewsView news={news} setNewsField={handleEditNewsField} onAdd={handleAddNews} onUpdate={handleUpdateNews} onDelete={handleDeleteNews} newsTitle={newsTitle} setNewsTitle={setNewsTitle} newsContent={newsContent} setNewsContent={setNewsContent} newsActive={newsActive} setNewsActive={setNewsActive} newsError={newsError} newsSuccess={newsSuccess} />}
+        {activeTab === "free" && (
+          <div className="space-y-6">
+            {/* FORMULARZ DODANIA */}
+            <div className="bg-white p-6 rounded-lg shadow max-w-md mx-auto">
+              <h3 className="text-xl font-semibold mb-4">Dodaj darmowy materiał</h3>
+              {resError   && <p className="text-red-600 mb-2">{resError}</p>}
+              {resSuccess && <p className="text-green-600 mb-2">{resSuccess}</p>}
+              <input
+                value={resTitle}
+                onChange={e => setResTitle(e.target.value)}
+                placeholder="Tytuł"
+                className="w-full border p-2 mb-3 rounded"
+              />
+              <input
+                value={resLink}
+                onChange={e => setResLink(e.target.value)}
+                placeholder="URL YouTube"
+                className="w-full border p-2 mb-3 rounded"
+              />
+              <button
+                onClick={handleAddResource}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Dodaj
+              </button>
+            </div>
+
+            {/* LISTA MATERIAŁÓW */}
+            <h3 className="text-2xl font-semibold">Lista materiałów</h3>
+            <div className="space-y-4">
+              {freeResources.map(r => (
+                <div key={r.id} className="bg-white p-4 rounded-lg shadow space-y-2">
+                  <input
+                    value={r.title}
+                    onChange={e => handleEditResourceField(r.id, "title", e.target.value)}
+                    className="w-full border p-2 rounded mb-1"
+                  />
+                  <input
+                    value={r.link}
+                    onChange={e => handleEditResourceField(r.id, "link", e.target.value)}
+                    className="w-full border p-2 rounded mb-1"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpdateResource(r)}
+                      className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+                    >
+                      Zapisz
+                    </button>
+                    <button
+                      onClick={() => handleDeleteResource(r.id)}
+                      className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+                    >
+                      Usuń
+                    </button>
+                    <a
+                      href={r.link}
+                      target="_blank"
+                      className="ml-auto text-blue-600 hover:underline"
+                    >
+                      ▶ Otwórz
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );

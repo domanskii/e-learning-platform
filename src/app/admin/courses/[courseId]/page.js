@@ -111,7 +111,6 @@ export default function EditCoursePage() {
   💾 Zapisz wszystkie zmiany
 </button>
 
-      {/* Edytowalne szczegóły kursu */}
       <div className="mt-6 p-4 bg-gray-200 rounded shadow-md w-full max-w-2xl">
         <input
           type="text"
@@ -133,7 +132,6 @@ export default function EditCoursePage() {
         />
       </div>
 
-      {/* Edycja quizu */}
       <h2 className="text-2xl font-semibold mt-6">Edycja Quizu</h2>
       {message && <p className="mt-2 text-lg">{message}</p>}
 
@@ -190,7 +188,7 @@ export default function EditCoursePage() {
         </ul>
       )}
 
-      {/* Dodawanie nowego pytania */}
+
       <div className="p-4 bg-gray-300 rounded shadow-md w-full max-w-2xl mt-6">
         <input
           type="text"

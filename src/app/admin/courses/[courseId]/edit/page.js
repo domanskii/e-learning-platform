@@ -65,14 +65,25 @@ export default function EditCoursePage() {
   };
 
   const handleAddLesson = moduleIndex => {
-    setModules(prev => prev.map((m, i) => {
-      if (i !== moduleIndex) return m;
-      return {
-        ...m,
-        lessons: [...(m.lessons || []), { lessonId: `les-${Date.now()}`, title: "Nowa lekcja", content: "" }]
-      };
-    }));
+    setModules(prev =>
+      prev.map((m, i) => {
+        if (i !== moduleIndex) return m;
+        return {
+          ...m,
+          lessons: [
+            ...(m.lessons || []),
+            {
+              lessonId: `les-${Date.now()}`,
+              title: "Nowa lekcja",
+              content: "",
+              videoUrl: ""
+            }
+          ]
+        };
+      })
+    );
   };
+  
 
   const handleDeleteLesson = (moduleIndex, lessonIndex) => {
     if (!confirm("Czy na pewno usunąć lekcję?")) return;
@@ -91,6 +102,21 @@ export default function EditCoursePage() {
       const lessons = m.lessons.map((l, idx) => idx === lessonIndex ? { ...l, [field]: value } : l);
       return { ...m, lessons };
     }));
+  };
+  
+  const handleEditLessonVideo = (mi, li, url) =>
+  handleEditLesson(mi, li, "videoUrl", url);
+
+  const handleEditQuestionMedia = (moduleIndex, questionIndex, url) => {
+    setModules(prev =>
+      prev.map((m, mi) => {
+        if (mi !== moduleIndex || !m.test) return m;
+        const questions = m.test.questions.map((q, qi) =>
+          qi === questionIndex ? { ...q, mediaUrl: url } : q
+        );
+        return { ...m, test: { ...m.test, questions } };
+      })
+    );
   };
 
   const handleAddTest = moduleIndex => {
@@ -221,103 +247,181 @@ export default function EditCoursePage() {
                 </button>
               </div>
 
-              {/* Lekcje */}
-              <div className="pl-2 mb-4">
-                <h3 className="font-semibold mb-2">Lekcje:</h3>
-                {mod.lessons.map((les, li) => (
-                  <div key={les.lessonId} className="mb-2 p-3 bg-white rounded shadow">
-                    <input
-                      type="text"
-                      value={les.title}
-                      onChange={e => handleEditLesson(mi, li, 'title', e.target.value)}
-                      className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
-                    />
-                    <textarea
-                      rows={3}
-                      value={les.content}
-                      onChange={e => handleEditLesson(mi, li, 'content', e.target.value)}
-                      className="w-full border p-2 rounded focus:outline-none focus:ring"
-                    />
-                    <button onClick={() => handleDeleteLesson(mi, li)} className="mt-2 text-red-500 hover:underline">
-                      🗑 Usuń lekcję
-                    </button>
-                  </div>
-                ))}
-                <button onClick={() => handleAddLesson(mi)} className="mt-2 bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition">
-                  ➕ Dodaj lekcję
-                </button>
-              </div>
+    <div className="pl-2 mb-4">
+        <h3 className="font-semibold mb-2">Lekcje:</h3>
+        {mod.lessons.map((les, li) => (
+        <div key={les.lessonId} className="mb-2 p-3 bg-white rounded shadow">
 
-              {/* Test */}
-              <div className="p-3 bg-gray-200 rounded">
-                <h3 className="font-semibold mb-2">Test:</h3>
-                {!mod.test ? (
-                  <button onClick={() => handleAddTest(mi)} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition">
+      <input
+        type="text"
+        value={les.title}
+        onChange={e => handleEditLesson(mi, li, 'title', e.target.value)}
+        className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
+      />
+
+      <textarea
+        rows={3}
+        value={les.content}
+        onChange={e => handleEditLesson(mi, li, 'content', e.target.value)}
+        className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
+      />
+
+      <label className="block font-medium mb-1">Link do wideo / obrazka</label>
+      <input
+        type="text"
+        value={les.videoUrl}
+        onChange={e => handleEditLessonVideo(mi, li, e.target.value)}
+        placeholder="https://youtu.be/… lub https://…jpg"
+        className="w-full border p-2 rounded mb-2 focus:outline-none focus:ring"
+      />
+
+      {les.videoUrl && (() => {
+        const match = les.videoUrl.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+        if (match) {
+          return (
+            <iframe
+              src={`https://www.youtube.com/embed/${match[1]}`}
+              className="w-full h-48 rounded mb-2"
+              allowFullScreen
+            />
+          );
+        } else {
+          return (
+            <img
+              src={les.videoUrl}
+              alt="Podgląd"
+              className="w-full h-48 object-cover rounded mb-2"
+            />
+          );
+        }
+      })()}
+
+      <button
+        onClick={() => handleDeleteLesson(mi, li)}
+        className="mt-2 text-red-500 hover:underline"
+      >
+        🗑 Usuń lekcję
+      </button>
+    </div>
+  ))}
+  <button
+    onClick={() => handleAddLesson(mi)}
+    className="mt-2 bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition"
+  >
+    ➕ Dodaj lekcję
+  </button>
+</div>
+
+
+      <div className="p-3 bg-gray-200 rounded">
+           <h3 className="font-semibold mb-2">Test:</h3>
+              {!mod.test ? (
+                 <button onClick={() => handleAddTest(mi)} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition">
                     ➕ Dodaj test
                   </button>
                 ) : (
-                  <>
-                    <div className="flex gap-2 mb-2">
-                      <button onClick={() => handleDeleteTest(mi)} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition">
-                        🗑 Usuń test
-                      </button>
-                      <button onClick={() => handleAddTestQuestion(mi)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition">
-                        ➕ Dodaj pytanie
-                      </button>
-                    </div>
-                    {mod.test.questions.map((q, qi) => (
-                      <div key={qi} className="mb-4 p-3 bg-white rounded shadow">
-                        <div className="flex items-center mb-2">
-                          <input
-                            type="text"
-                            placeholder="Pytanie..."
-                            value={q.question}
-                            onChange={e => handleEditTestQuestion(mi, qi, e.target.value)}
-                            className="flex-1 border p-2 rounded focus:outline-none focus:ring"
-                          />
-                          <button onClick={() => handleDeleteTestQuestion(mi, qi)} className="ml-2 text-red-600 hover:underline">
+                 <>
+      <div className="flex gap-2 mb-2">
+         <button onClick={() => handleDeleteTest(mi)} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition">
+               🗑 Usuń test
+         </button>
+         <button onClick={() => handleAddTestQuestion(mi)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition">
+               ➕ Dodaj pytanie
+         </button>
+      </div>
+           {mod.test.questions.map((q, qi) => (
+              <div key={qi} className="mb-4 p-3 bg-white rounded shadow">
+              <div className="flex items-center mb-2">
+              <input
+                 type="text"
+                 placeholder="Pytanie..."
+                 value={q.question}
+                 onChange={e => handleEditTestQuestion(mi, qi, e.target.value)}
+                 className="flex-1 border p-2 rounded focus:outline-none focus:ring"
+              />
+              <button onClick={() => handleDeleteTestQuestion(mi, qi)} className="ml-2 text-red-600 hover:underline">
                             🗑
-                          </button>
-                        </div>
-                        <h4 className="font-semibold mb-2">Odpowiedzi:</h4>
-                        {q.options.map((opt, oi) => (
-                          <div key={oi} className="flex items-center mb-1">
-                            <input
-                              type="radio"
-                              name={`correct-${mi}-${qi}`}
-                              checked={q.correctAnswer === oi}
-                              onChange={() => handleSelectCorrectAnswer(mi, qi, oi)}
-                              className="mr-2"
-                            />
-                            <input
-                              type="text"
-                              value={opt}
-                              onChange={e => handleEditAnswer(mi, qi, oi, e.target.value)}
-                              className="flex-1 border p-2 rounded focus:outline-none focus:ring"
-                            />
-                            <button onClick={() => handleDeleteAnswer(mi, qi, oi)} className="ml-2 text-red-600 hover:underline">
-                              🗑
-                            </button>
-                          </div>
-                        ))}
-                        <button onClick={() => handleAddAnswer(mi, qi)} className="mt-2 bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 transition">
-                          ➕ Dodaj odpowiedź
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
+              </button>
+                   </div>
+        <h4 className="font-semibold mb-2">Odpowiedzi:</h4>
+        {q.options.map((opt, oi) => (
+  <div key={oi} className="flex items-center mb-1">
+    <input
+      type="radio"
+      name={`correct-${mi}-${qi}`}
+      checked={q.correctAnswer === oi}
+      onChange={() => handleSelectCorrectAnswer(mi, qi, oi)}
+      className="mr-2"
+    />
+    <input
+      type="text"
+      value={opt}
+      onChange={e => handleEditAnswer(mi, qi, oi, e.target.value)}
+      className="flex-1 border p-2 rounded focus:outline-none focus:ring"
+    />
+    <button
+      onClick={() => handleDeleteAnswer(mi, qi, oi)}
+      className="ml-2 text-red-600 hover:underline"
+    >
+      🗑
+    </button>
+  </div>
+))}
 
-          <div className="flex gap-2">
-            <button onClick={handleSaveCourse} disabled={loading} className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
-              {loading ? '⏳ Zapis...' : '💾 Zapisz zmiany'}
-            </button>
-            <button onClick={() => router.push('/admin')} className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition">
-              ↩️ Powrót
-            </button>
+<div className="mt-2">
+  <label className="block font-medium mb-1">Link do wideo / obrazka</label>
+  <input
+    type="text"
+    value={q.mediaUrl || ""}
+    onChange={e => handleEditQuestionMedia(mi, qi, e.target.value)}
+    placeholder="https://youtu.be/… lub https://…jpg"
+    className="w-full border p-2 rounded focus:outline-none focus:ring mb-2"
+  />
+
+  {q.mediaUrl && (() => {
+    const m = q.mediaUrl.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+    if (m) {
+      return (
+        <iframe
+          src={`https://www.youtube.com/embed/${m[1]}`}
+          className="w-full h-48 rounded mb-2"
+          allowFullScreen
+        />
+      );
+    } else {
+      return (
+        <img
+          src={q.mediaUrl}
+          alt="Podgląd"
+          className="w-full h-48 object-cover rounded mb-2"
+        />
+      );
+    }
+  })()}
+</div>
+    <button onClick={() => handleAddAnswer(mi, qi)} className="mt-2 bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 transition">
+      ➕ Dodaj odpowie
+     </button>
+  </div>
+    ))}
+    </>
+     )}    
+     </div>
+      </div>
+     ))}
+
+ <section className="mb-6">
+   <button onClick={handleAddModule} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+     ➕ Dodaj moduł
+  </button>
+     </section>
+      <div className="flex gap-2">
+         <button onClick={handleSaveCourse} disabled={loading} className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
+           {loading ? '⏳ Zapis...' : '💾 Zapisz zmiany'}
+         </button>
+         <button onClick={() => router.push('/admin')} className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition">
+         ↩️ Powrót
+           </button>
           </div>
         </div>
       </main>
